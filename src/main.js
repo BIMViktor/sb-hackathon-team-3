@@ -46,12 +46,22 @@ function fromInfo(info) {
   };
 }
 
-async function showPick(api, guid) {
+async function mark(api, guid, shiftKey) {
+  try {
+    if (!shiftKey) await api.deHighlightAllObjects();
+    await api.highlightObject(guid);
+  } catch {
+    /* The text still shows if the viewer rejects the id. */
+  }
+}
+
+async function showPick(api, guid, shiftKey) {
   emptyEl.hidden = true;
   factsEl.hidden = false;
   nameEl.textContent = "…";
   typeEl.textContent = "…";
   floorEl.textContent = "…";
+  const marked = mark(api, guid, shiftKey);
   try {
     const row = fromInfo(await api.getObjectInfo(guid));
     nameEl.textContent = dash(row.name);
@@ -62,6 +72,7 @@ async function showPick(api, guid) {
     typeEl.textContent = "–";
     floorEl.textContent = "–";
   }
+  await marked;
 }
 
 function renderChips(api) {
@@ -70,7 +81,11 @@ function renderChips(api) {
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = object.name;
-    button.addEventListener("click", () => api.simulate?.pick(object.guid));
+    button.addEventListener("click", () => {
+      for (const chip of chipsEl.querySelectorAll("button")) chip.classList.remove("on");
+      button.classList.add("on");
+      api.simulate?.pick(object.guid);
+    });
     chipsEl.append(button);
   }
 }
@@ -91,7 +106,7 @@ const ready = loadWidgetApi().then(() =>
     onPickedObject(result) {
       const guid = result && result.guid;
       if (!guid) return;
-      ready.then((api) => showPick(api, guid));
+      ready.then((api) => showPick(api, guid, Boolean(result.shiftKey)));
     },
   }),
 );

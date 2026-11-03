@@ -8,32 +8,23 @@
   <body>
     <div class="frame">
       <header>
-        <h1>Team 3</h1>
+        <div>
+          <p class="kicker">StreamBIM hackathon</p>
+          <h1>Team 3</h1>
+        </div>
         <p id="status" class="status">Ansluter…</p>
       </header>
 
-      <section class="start">
-        <p>Klicka på ett objekt i modellen. Namn, typ och våning visas här.</p>
-        <p>Ändra src/main.js och src/style.css. Rör inte src/streambim.js. Installera inga nya paket.</p>
-        <p>En push till main uppdaterar widgeten efter ungefär en minut.</p>
-      </section>
+      <p class="lead">Klicka på något i modellen.</p>
+      <p class="note">Namn, typ och våning visas här, och objektet markeras i vyn. Ändra src/main.js och src/style.css. Låt src/streambim.js vara. Inga nya paket. En push till main syns efter ungefär en minut.</p>
 
-      <section class="pick">
-        <p id="empty">Inget klick ännu.</p>
-        <dl id="facts" hidden>
-          <div>
-            <dt>Namn</dt>
-            <dd id="name">–</dd>
-          </div>
-          <div>
-            <dt>Typ</dt>
-            <dd id="type">–</dd>
-          </div>
-          <div>
-            <dt>Våning</dt>
-            <dd id="floor">–</dd>
-          </div>
-        </dl>
+      <section class="card">
+        <p id="empty">Inget valt ännu.</p>
+        <div id="facts" hidden>
+          <p id="name" class="name">–</p>
+          <p class="row"><span>Typ</span><b id="type">–</b></p>
+          <p class="row"><span>Våning</span><b id="floor">–</b></p>
+        </div>
       </section>
 
       <section id="simulator" class="simulator" hidden>
