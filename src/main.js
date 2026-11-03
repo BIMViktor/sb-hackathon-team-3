@@ -47,11 +47,25 @@ function fromInfo(info) {
 }
 
 async function mark(api, guid, shiftKey) {
+  const live = api.api;
   try {
-    if (!shiftKey) await api.deHighlightAllObjects();
+    if (live && live.setViewportState) {
+      let highlightedObjects = [guid];
+      if (shiftKey && live.getViewportState) {
+        const state = await live.getViewportState();
+        const current = Array.isArray(state && state.highlightedObjects) ? state.highlightedObjects : [];
+        highlightedObjects = current.includes(guid) ? current : current.concat(guid);
+      }
+      await live.setViewportState({ highlightedObjects });
+      return;
+    }
     await api.highlightObject(guid);
   } catch {
-    /* The text still shows if the viewer rejects the id. */
+    try {
+      await api.highlightObject(guid);
+    } catch {
+      /* The text still shows if the viewer rejects the id. */
+    }
   }
 }
 
