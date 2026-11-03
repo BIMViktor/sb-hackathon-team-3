@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StreamBIM Hackathon</title>
+  </head>
+  <body>
+    <div class="frame">
+      <header>
+        <h1>Hackathon-widget</h1>
+        <p id="status" class="status">Ansluter…</p>
+        <p id="meta" class="meta"></p>
+        <p id="camera" class="camera"></p>
+      </header>
+
+      <section>
+        <h2>Modellen</h2>
+        <label>
+          Objekt-GUID
+          <input id="guid" name="guid" value="MOCK-DOOR-101" autocomplete="off" />
+        </label>
+        <div class="actions">
+          <button id="btn-floors" class="primary" type="button">Hämta våningar</button>
+          <button id="btn-info" type="button">Objektinfo</button>
+          <button id="btn-highlight" type="button">Markera</button>
+          <button id="btn-goto" type="button">Gå till</button>
+          <button id="btn-color" type="button">Färglägg</button>
+          <button id="btn-search" type="button">Sök dörrar</button>
+          <button id="btn-clear" type="button">Rensa</button>
+          <button id="btn-ping" type="button">Skicka postMessage</button>
+        </div>
+        <ul id="floors"></ul>
+        <p id="effect" class="effect"></p>
+      </section>
+
+      <section id="simulator" class="simulator" hidden>
+        <h2>Simulera StreamBIM</h2>
+        <p class="hint">Klicka ett objekt för att simulera ett klick i modellen.</p>
+        <div id="object-chips" class="chips"></div>
+        <div class="sim-actions">
+          <button id="btn-sim-floor" type="button">Byt våning</button>
+          <button id="btn-sim-camera" type="button">Flytta kamera</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Händelselogg</h2>
+        <pre id="log" class="log" aria-live="polite"></pre>
+        <p class="hint">Efter push: vänta tills bygget är klart och ladda om StreamBIM-vyn. Ett misslyckat bygge lämnar senaste fungerande version kvar.</p>
+      </section>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

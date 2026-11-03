@@ -1,0 +1,158 @@
+:root {
+  color: #1c2430;
+  background: #d9dee5;
+  font: 14px/1.4 "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+}
+
+.frame {
+  max-width: 420px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 14px 14px 28px;
+  background: #f6f8fa;
+  box-shadow: 0 0 0 1px #d0d7de;
+}
+
+h1, h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+h2 {
+  margin-bottom: 8px;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #5c6b7a;
+}
+
+header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.status {
+  align-self: flex-start;
+  margin: 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #e6ebf0;
+  color: #3d4c5c;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status[data-mode="mock"] { background: #fff4d6; color: #7a4e00; }
+.status[data-mode="live"] { background: #e5f6ee; color: #0b6e4f; }
+.status[data-mode="error"] { background: #fde8e8; color: #9b1c1c; }
+
+.meta, .camera, .hint {
+  margin: 0;
+  color: #5c6b7a;
+  font-size: 12px;
+}
+
+section + section {
+  margin-top: 16px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #c5ced6;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+}
+
+.actions, .sim-actions, .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+button {
+  padding: 8px 10px;
+  border: 1px solid #c5ced6;
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover { background: #eef3f6; }
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid #0b6e4f;
+  outline-offset: 2px;
+}
+
+.primary {
+  border-color: #0b6e4f;
+  background: #0b6e4f;
+  color: #fff;
+}
+
+.primary:hover { background: #095c42; }
+
+#floors {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.floor, .chip {
+  background: #fff;
+}
+
+.effect {
+  min-height: 1.2em;
+  margin: 10px 0 0;
+  padding-left: 8px;
+  border-left: 4px solid transparent;
+}
+
+.simulator {
+  padding: 10px;
+  border-radius: 10px;
+  background: #fff8e8;
+}
+
+.log {
+  max-height: 200px;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 8px;
+  background: #1c2430;
+  color: #e7eef5;
+  font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  white-space: pre-wrap;
+}
+
+.hint { margin-top: 12px; }
