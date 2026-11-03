@@ -46,27 +46,17 @@ function fromInfo(info) {
   };
 }
 
-async function mark(api, guid, shiftKey) {
-  const live = api.api;
-  try {
-    if (live && live.setViewportState) {
-      let highlightedObjects = [guid];
-      if (shiftKey && live.getViewportState) {
-        const state = await live.getViewportState();
-        const current = Array.isArray(state && state.highlightedObjects) ? state.highlightedObjects : [];
-        highlightedObjects = current.includes(guid) ? current : current.concat(guid);
-      }
-      await live.setViewportState({ highlightedObjects });
-      return;
-    }
-    await api.highlightObject(guid);
-  } catch {
+function mark(api, guid, shiftKey) {
+  if (!shiftKey) {
     try {
-      await api.highlightObject(guid);
+      api.deHighlightAllObjects();
     } catch {
-      /* The text still shows if the viewer rejects the id. */
+      /* The clear never answers. Fire it and move on. */
     }
   }
+  setTimeout(() => {
+    api.highlightObject(guid).catch(() => {});
+  }, 40);
 }
 
 async function showPick(api, guid, shiftKey) {
