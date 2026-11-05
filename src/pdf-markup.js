@@ -196,11 +196,11 @@ export function createMarkupLayer(surface, store, report, selectChanged = () => 
     const timer = store ? window.setInterval(() => { if (document.visibilityState !== "hidden")
         void reload(true); }, 15000) : undefined;
     const onFocus = () => { void reload(true); };
-    const beforeClose = (e) => { if (dirty.size) {
+    const beforeClose = (e) => { if (store && dirty.size) {
         e.preventDefault();
         report("Osparade ändringar · vänta eller försök spara igen");
     } };
-    const beforeUnload = (e) => { if (dirty.size) {
+    const beforeUnload = (e) => { if (store && dirty.size) {
         e.preventDefault();
         e.returnValue = "";
     } };
