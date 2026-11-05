@@ -1,1 +1,130 @@
-var N=["Global Id","@Building Storey","@Group Layer","@Document Id","@Building Id","Timestamp","groups","BaseType","uri"],G=["Location","Geometry","Custom"];function I(c,S,O,y,s){let A=(e)=>!s||(e===void 0?s.legacy:Number(e))===s.current,j=`/project-${encodeURIComponent(S)}/api/v1/v2/ifc-objects`,h=(e)=>`${j}/${encodeURIComponent(e)}?building=${encodeURIComponent(O)}&_=${Date.now()}`,g=new Map,d=new Map,b=new Map,u=(e)=>JSON.stringify([e.id,e.page,e.tool,e.color,e.width,e.opacity,e.points,Boolean(e.deleted),e.layerId??"layer-1",e.name??""]),m=async(e)=>JSON.parse(await c.makeApiRequest({url:h(e),method:"GET"})).data,k=(e)=>{let i=e.attributes.groups?.find((n)=>n.label==="Team3_PDF_Markup")?.content.properties.find((n)=>n.key==="Payload")?.value;if(typeof i!=="string")return null;try{let n=JSON.parse(i);if(n.version!==1||String(n.documentId)!==y||!A(n.revision)||!Array.isArray(n.markup?.points)||typeof n.markup?.id!=="string")return null;let r=n.markup;if(!Number.isInteger(r.page)||r.page<1||!["highlight","pen","cloud","rectangle","square","layer"].includes(r.tool)||!["red","yellow","green","blue","black"].includes(r.color)||!Number.isFinite(r.width)||!Number.isFinite(r.opacity)||!r.points.every((t)=>Array.isArray(t)&&t.length===2&&t.every(Number.isFinite)))return null;if(r.tool==="layer"&&typeof r.name!=="string")return null;return n.markup}catch{return null}};return{async load(){let e;try{e=await c.findObjects({key:"@kind",value:"Annotation",limit:1e4})}catch(n){if(!(n instanceof Error?/unknown/i.test(n.message):typeof n==="object"&&n!==null&&("code"in n)&&n.code==="unknown"))throw n;e=await c.findObjects({key:"@kind",value:"Annotation",limit:1e4})}if(e.length>=1e4)throw Error("För många annoteringsobjekt · hela listan kunde inte läsas");e=[...new Set([...e,...g.values()])];let i=[];for(let n=0;n<e.length;n+=8){let r=await Promise.all(e.slice(n,n+8).map(m));for(let t of r){let o=k(t);if(o){if(g.set(o.id,t.id),!d.has(o.id))b.set(o.id,u(o));i.push(o)}}}return i},save(e){let i=JSON.parse(JSON.stringify(e)),n=(d.get(e.id)??Promise.resolve()).catch(()=>{}).then(async()=>{let t=g.get(e.id);if(!t){let a=await c.getCameraState();t=await c.createObject({center:a.position,name:`PDF ${y}${s?` rev ${s.current}`:""} · ${e.tool} · ${e.id}`}),g.set(e.id,t)}let o=await m(t),p=o.attributes;if(p.layer)throw Error("Kan inte ändra modellobjekt");let f=k(o),v=b.get(e.id);if(f&&v&&u(f)!==v&&u(f)!==u(i))throw Error("Annoteringen har ändrats av en annan användare. Din ändring är inte sparad");let P=(p.groups??[]).filter((a)=>!G.includes(a.label)&&a.label!=="Team3_PDF_Markup").map((a)=>({label:a.label,content:{properties:a.content.properties.map((l)=>({...l,value:l.valueType==="bool"?l.value==="true":l.valueType==="float8"||l.valueType==="int64"?Number(l.value):l.value}))}})),M=JSON.stringify({version:1,documentId:y,...s?{revision:s.current}:{},markup:i});P.push({label:"Team3_PDF_Markup",content:{properties:[{key:"Payload",value:M,valueType:"str",measure:"",unit:"",valueItem:""}]}});let E={data:{id:t,type:"ifc-objects",attributes:{layer:null,properties:Object.fromEntries(Object.entries(p.properties).filter(([a])=>!N.includes(a))),groups:P,center:p.center,bbox:p.bbox,boundary:p.boundary},relationships:{building:o.relationships.building,floors:o.relationships.floors}}},R;try{await c.makeApiRequest({url:h(t),method:"PATCH",body:E})}catch(a){R=a}let w=k(await m(t));if(!w||u(w)!==u(i))throw R??Error("Annoteringen kunde inte verifieras i StreamBIM");b.set(e.id,u(w))});d.set(e.id,n);let r=()=>{if(d.get(e.id)===n)d.delete(e.id)};return n.then(r,r),n}}}export{I as createStreambimMarkupStore};
+// src/lib/streambim-markup.ts
+var GROUP = "Team3_PDF_Markup";
+var SERVER_PROPS = ["Global Id", "@Building Storey", "@Group Layer", "@Document Id", "@Building Id", "Timestamp", "groups", "BaseType", "uri"];
+var SERVER_GROUPS = ["Location", "Geometry", "Custom"];
+function createStreambimMarkupStore(api, projectId, buildingId, documentId, revision) {
+  const sameRevision = (stored) => !revision || (stored === undefined ? revision.legacy : Number(stored)) === revision.current;
+  const base = `/project-${encodeURIComponent(projectId)}/api/v1/v2/ifc-objects`;
+  const url = (id) => `${base}/${encodeURIComponent(id)}?building=${encodeURIComponent(buildingId)}&_=${Date.now()}`;
+  const records = new Map;
+  const pending = new Map;
+  const fingerprints = new Map;
+  const fingerprint = (item) => JSON.stringify([item.id, item.page, item.tool, item.color, item.width, item.opacity, item.points, Boolean(item.deleted), item.layerId ?? "layer-1", item.name ?? ""]);
+  const get = async (id) => JSON.parse(await api.makeApiRequest({ url: url(id), method: "GET" })).data;
+  const parse = (record) => {
+    const raw = record.attributes.groups?.find((g) => g.label === GROUP)?.content.properties.find((p) => p.key === "Payload")?.value;
+    if (typeof raw !== "string")
+      return null;
+    try {
+      const payload = JSON.parse(raw);
+      if (payload.version !== 1 || String(payload.documentId) !== documentId || !sameRevision(payload.revision) || !Array.isArray(payload.markup?.points) || typeof payload.markup?.id !== "string")
+        return null;
+      const m = payload.markup;
+      if (!Number.isInteger(m.page) || m.page < 1 || !["highlight", "pen", "cloud", "rectangle", "square", "layer"].includes(m.tool) || !["red", "yellow", "green", "blue", "black"].includes(m.color) || !Number.isFinite(m.width) || !Number.isFinite(m.opacity) || !m.points.every((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)))
+        return null;
+      if (m.tool === "layer" && typeof m.name !== "string")
+        return null;
+      return payload.markup;
+    } catch {
+      return null;
+    }
+  };
+  return {
+    async load() {
+      let ids;
+      try {
+        ids = await api.findObjects({ key: "@kind", value: "Annotation", limit: 1e4 });
+      } catch (e) {
+        const unknown = e instanceof Error ? /unknown/i.test(e.message) : typeof e === "object" && e !== null && ("code" in e) && e.code === "unknown";
+        if (!unknown)
+          throw e;
+        ids = await api.findObjects({ key: "@kind", value: "Annotation", limit: 1e4 });
+      }
+      if (ids.length >= 1e4)
+        throw new Error("För många annoteringsobjekt · hela listan kunde inte läsas");
+      ids = [...new Set([...ids, ...records.values()])];
+      const result = [];
+      for (let start = 0;start < ids.length; start += 8) {
+        const batch = await Promise.all(ids.slice(start, start + 8).map(get));
+        for (const record of batch) {
+          const item = parse(record);
+          if (item) {
+            records.set(item.id, record.id);
+            if (!pending.has(item.id))
+              fingerprints.set(item.id, fingerprint(item));
+            result.push(item);
+          }
+        }
+      }
+      return result;
+    },
+    save(item) {
+      const snapshot = JSON.parse(JSON.stringify(item));
+      const operation = (pending.get(item.id) ?? Promise.resolve()).catch(() => {}).then(async () => {
+        let id = records.get(item.id);
+        if (!id) {
+          const camera = await api.getCameraState();
+          id = await api.createObject({ center: camera.position, name: `PDF ${documentId}${revision ? ` rev ${revision.current}` : ""} · ${item.tool} · ${item.id}` });
+          records.set(item.id, id);
+        }
+        const current = await get(id), a = current.attributes;
+        if (a.layer)
+          throw new Error("Kan inte ändra modellobjekt");
+        const previous = parse(current), expected = fingerprints.get(item.id);
+        if (previous && expected && fingerprint(previous) !== expected && fingerprint(previous) !== fingerprint(snapshot))
+          throw new Error("Annoteringen har ändrats av en annan användare. Din ändring är inte sparad");
+        const groups = (a.groups ?? []).filter((g) => !SERVER_GROUPS.includes(g.label) && g.label !== GROUP).map((g) => ({ label: g.label, content: { properties: g.content.properties.map((p) => ({ ...p, value: p.valueType === "bool" ? p.value === "true" : p.valueType === "float8" || p.valueType === "int64" ? Number(p.value) : p.value })) } }));
+        const payload = JSON.stringify({ version: 1, documentId, ...revision ? { revision: revision.current } : {}, markup: snapshot });
+        groups.push({ label: GROUP, content: { properties: [{ key: "Payload", value: payload, valueType: "str", measure: "", unit: "", valueItem: "" }] } });
+        const body = { data: { id, type: "ifc-objects", attributes: { layer: null, properties: Object.fromEntries(Object.entries(a.properties).filter(([key]) => !SERVER_PROPS.includes(key))), groups, center: a.center, bbox: a.bbox, boundary: a.boundary }, relationships: { building: current.relationships["building"], floors: current.relationships["floors"] } } };
+        let writeError;
+        try {
+          await api.makeApiRequest({ url: url(id), method: "PATCH", body });
+        } catch (e) {
+          writeError = e;
+        }
+        const readBack = await get(id);
+        const stored = parse(readBack);
+        if (!stored || fingerprint(stored) !== fingerprint(snapshot)) {
+          if (writeError)
+            throw writeError;
+          const group = readBack.attributes.groups?.find((g) => g.label === GROUP);
+          const property = group?.content.properties.find((p) => p.key === "Payload");
+          let reason;
+          if (!group)
+            reason = "StreamBIM läste tillbaka objektet utan annoteringsgruppen";
+          else if (typeof property?.value !== "string")
+            reason = "StreamBIM läste tillbaka objektet utan annoteringsdata";
+          else {
+            try {
+              const payload = JSON.parse(property.value);
+              if (payload.version !== 1)
+                reason = "StreamBIM returnerade ett annat annoteringsformat";
+              else if (String(payload.documentId) !== documentId || !sameRevision(payload.revision))
+                reason = "StreamBIM returnerade data för en annan PDF eller revision";
+              else if (!stored)
+                reason = "StreamBIM returnerade ogiltiga annoteringsdata";
+              else
+                reason = "StreamBIM läste tillbaka andra värden än de som skickades";
+            } catch {
+              reason = "StreamBIM returnerade oläsbara annoteringsdata";
+            }
+          }
+          console.warn("[pdf-markup] Verification failed", { objectId: id, reason, hasGroup: Boolean(group), payloadLength: typeof property?.value === "string" ? property.value.length : 0 });
+          throw new Error(`Annoteringen kunde inte verifieras i StreamBIM: ${reason} (objekt ${id}). Noteringen är kvar här men inte bekräftat sparad`);
+        }
+        fingerprints.set(item.id, fingerprint(stored));
+      });
+      pending.set(item.id, operation);
+      const cleanup = () => {
+        if (pending.get(item.id) === operation)
+          pending.delete(item.id);
+      };
+      operation.then(cleanup, cleanup);
+      return operation;
+    }
+  };
+}
+export {
+  createStreambimMarkupStore
+};
