@@ -65,3 +65,16 @@ h1 { margin: 0; font-size: 20px; }
 @media (max-width: 480px) { .viewer .bar { flex-wrap: wrap; } .viewer .title { flex-basis: 100%; } .viewer .tools { margin-left: auto; } }
 
 .tools select { max-width: 78px; padding: 4px; border: 1px solid var(--line); border-radius: 4px; color: var(--text); background: var(--card); }
+
+:root { --markup-red: #d92428; --markup-yellow: #f4df20; --markup-green: #25954e; --markup-blue: #2277ce; --markup-black: #222222; }
+.pdf-surface { position: relative; margin: 0 auto; width: max-content; }
+.markup-layer { position:absolute; inset:0; width:100%; height:100%; overflow:visible; touch-action:none; pointer-events:none; }
+.markup-highlight { mix-blend-mode:multiply; }
+.markup-selected { stroke-dasharray: 5 3; filter:drop-shadow(0 0 2px var(--markup-blue)); }
+.markup-toolbar { padding:6px 10px; border-bottom:1px solid var(--line); background:var(--card); }
+.markup-tools { display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+.markup-tools button { width:32px; height:32px; border:0; background:none; color:var(--text); border-radius:4px; font-size:20px; cursor:pointer; }
+.markup-tools button[aria-pressed=true] { background:var(--accent-soft); color:var(--accent); }
+.markup-tools button:disabled { opacity:.4; }
+.markup-tools select { padding:5px; max-width:85px; border:1px solid var(--line); border-radius:4px; background:var(--card); color:var(--text); }
+.markup-status { color:var(--muted); font-size:12px; }

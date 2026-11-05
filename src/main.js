@@ -8,6 +8,8 @@
 import { connectWidget } from "./streambim.js";
 import "./style.css";
 import { createPdfGestures } from "./pdf-gestures.js";
+import { createMarkupLayer } from "./pdf-markup.js";
+import { createStreambimMarkupStore } from "./streambim-markup.js";
 
 const PDFJS_VERSION = "4.10.38";
 const PDFJS_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.min.mjs`;
@@ -27,6 +29,31 @@ const titleEl = $("#doc-title");
 const pageEl = $("#page-info");
 const stageEl = $("#stage");
 const canvas = $("#canvas");
+const surface = document.createElement("div");
+surface.className = "pdf-surface";
+canvas.before(surface);
+surface.append(canvas);
+let markupLayer = null;
+let markupTool = "pan";
+const markupBar = document.createElement("div");
+markupBar.className = "markup-toolbar";
+markupBar.hidden = true;
+markupBar.innerHTML = `<div class="markup-tools">${[['pan','✋','Flytta PDF'],['select','↖','Välj annotering'],['highlight','▰','Överstrykningspenna'],['pen','✎','Frihand'],['cloud','☁','Moln'],['rectangle','▭','Rektangel'],['square','□','Ruta']].map(([id,icon,name])=>`<button data-tool="${id}" aria-label="${name}" title="${name}">${icon}</button>`).join('')}<select aria-label="Färg" data-style="color"><option value="red">Röd</option><option value="yellow">Gul</option><option value="green">Grön</option><option value="blue">Blå</option><option value="black">Svart</option></select><select aria-label="Linjetjocklek" data-style="width">${[1,2,3,5,8].map(n=>`<option value="${n}" ${n===3?'selected':''}>${n} pt</option>`).join('')}</select><select aria-label="Opacitet" data-style="opacity">${[1,.75,.5,.25].map(n=>`<option value="${n}">${n*100}%</option>`).join('')}</select><button data-action="delete" aria-label="Ta bort annotering" title="Ta bort annotering" disabled>⌫</button><button data-action="reload" aria-label="Uppdatera annoteringar" title="Uppdatera annoteringar">↻</button><button data-action="retry" aria-label="Försök spara igen" title="Försök spara igen">⇧</button></div><span class="markup-status" role="status"></span>`;
+stageEl.before(markupBar);
+const markupStatus = markupBar.querySelector('.markup-status');
+markupBar.onclick = e => {
+  const button=e.target.closest('button');if(!button)return;
+  if(button.dataset.tool) {
+    markupTool=button.dataset.tool;
+    markupLayer?.setTool(markupTool);
+    gestures?.setEnabled(markupTool==='pan');
+    for(const b of markupBar.querySelectorAll('[data-tool]'))b.setAttribute('aria-pressed',String(b.dataset.tool===markupTool));
+  }
+  if(button.dataset.action==='delete')markupLayer?.removeSelected();
+  if(button.dataset.action==='reload')void markupLayer?.reload();
+  if(button.dataset.action==='retry')markupLayer?.retry();
+};
+markupBar.onchange = e => { const key=e.target.dataset.style;if(key)markupLayer?.setStyle({[key]:key==='color'?e.target.value:Number(e.target.value)}); };
 const frame = $("#frame");
 const openTab = $("#open-tab");
 const zoomSelect = document.createElement("select");
@@ -182,7 +209,7 @@ listEl.addEventListener("click", async (e) => {
   btn.classList.add("busy");
   try {
     const url = await getDownloadUrl(doc.id);
-    await openPdf({ url, name: doc.filename });
+    await openPdf({ url, name: doc.filename, documentId: doc.id });
   } catch (err) {
     log("open", err);
     showMessage(err.message, true);
@@ -206,7 +233,7 @@ directEl.addEventListener("submit", async (e) => {
     }
     const url = await getDownloadUrl(id);
     showMessage("");
-    await openPdf({ url, name });
+    await openPdf({ url, name, documentId: id });
   } catch (err) {
     log("direct", err);
     showMessage(err.message, true);
@@ -227,7 +254,11 @@ function loadPdfjs() {
   return pdfjsPromise;
 }
 
-async function openPdf({ url, data, name }) {
+async function openPdf({ url, data, name, documentId }) {
+  markupLayer?.destroy();
+  markupLayer=null;
+  markupBar.hidden=true;
+  surface.hidden=false;
   listView.hidden = true;
   viewerView.hidden = false;
   titleEl.textContent = name;
@@ -256,9 +287,16 @@ async function openPdf({ url, data, name }) {
     const pdfjs = await loadPdfjs();
     pdfDoc = await pdfjs.getDocument({ data: new Uint8Array(data) }).promise;
     canvas.hidden = false;
+    const store = documentId && client?.api ? createStreambimMarkupStore(client.api,String(projectId),String(buildingId),String(documentId)) : undefined;
+    markupLayer = createMarkupLayer(surface,store,text=>{markupStatus.textContent=text;},selected=>{markupBar.querySelector('[data-action="delete"]').disabled=!selected;});
+    markupStatus.textContent = store ? 'Laddar annoteringar…' : 'Ej sparat · fristående läge';
+    markupBar.hidden=false;
+    markupTool='pan';
+    markupLayer.setTool('pan');
+    markupBar.querySelector('[data-tool="pan"]').setAttribute('aria-pressed','true');
     await renderPage();
     const { default: Panzoom } = await import(/* @vite-ignore */ "https://cdn.jsdelivr.net/npm/@panzoom/panzoom@4.6.0/dist/panzoom.es.js");
-    gestures = createPdfGestures(canvas, stageEl, Panzoom, (scale) => renderPage(false, scale), (scale) => {
+    gestures = createPdfGestures(surface, stageEl, Panzoom, (scale) => renderPage(false, scale), (scale) => {
       const custom = zoomSelect.querySelector('[data-current]');
       custom?.remove();
       if (![0.5,1,1.5,2,3,4,8].includes(scale)) {
@@ -272,6 +310,8 @@ async function openPdf({ url, data, name }) {
     // Hämtningen stoppas troligen av CORS. Visa i webbläsarens egen läsare istället.
     log("pdf.js kunde inte läsa, visar i ram", err);
     if (url) {
+      surface.hidden=true;
+      markupBar.hidden=true;
       frame.src = url;
       frame.hidden = false;
       pageEl.textContent = "Inbyggd läsare";
@@ -306,6 +346,7 @@ async function renderPage(reset = true, resolution = 1) {
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
     canvas.getContext("2d").drawImage(buffer, 0, 0);
+    markupLayer?.setPage(pageNum,width,height);
     pageEl.textContent = `${pageNum} / ${pdfDoc.numPages}`;
     $("#prev").disabled = pageNum <= 1;
     $("#next").disabled = pageNum >= pdfDoc.numPages;
