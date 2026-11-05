@@ -446,6 +446,7 @@ function layout() {
   frameEl.classList.toggle("split", wide);
   listView.hidden = !viewerView.hidden && !wide;
   $("#back").hidden = wide;
+  $("#back").parentElement.hidden = wide && openTab.hidden;
   if (wide) { if (layerBar.parentElement !== listView) listView.append(layerBar); }
   else if (markupBar.nextElementSibling !== layerBar) markupBar.after(layerBar);
 }
