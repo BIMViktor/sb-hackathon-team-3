@@ -75,13 +75,26 @@ async function sbGet(path, accept) {
   }
 }
 
+async function fetchAllDocuments() {
+  const limit = 200;
+  const all = [];
+  for (let skip = 0; skip < 20000; skip += limit) {
+    const res = await sbGet(`/project-${projectId}/api/v1/v2/documents?page[limit]=${limit}&page[skip]=${skip}`);
+    const page = res?.data || [];
+    all.push(...page);
+    const total = Number(res?.meta?.total);
+    if (page.length < limit || (total && all.length >= total)) break;
+  }
+  return { data: all };
+}
+
 async function loadDocuments() {
   showMessage("Hämtar dokument…");
   const [folderRes, docRes] = await Promise.all([
     sbGet(`/project-${projectId}/api/v1/v2/folders`).catch((e) => (log("folders", e), { data: [] })),
-    // filter[buildingId] gav HTTP-fel i projekt 19513, så vi hämtar alla PDF:er
-    // och avgör kalibrering mot byggnaden via document-alignments.
-    sbGet(`/project-${projectId}/api/v1/v2/documents?filter[fileExtensions]=pdf`),
+    // Filter (fileExtensions, buildingId) ger HTTP-fel från widgeten, så vi hämtar
+    // dokumenten sidvis utan filter och väljer PDF:er och kalibrering här.
+    fetchAllDocuments(),
   ]);
   folders = new Map((folderRes.data || []).map((f) => [f.id, f.attributes?.name || `Mapp ${f.id}`]));
   docs = (docRes.data || [])
