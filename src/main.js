@@ -255,6 +255,7 @@ function loadPdfjs() {
 }
 
 async function openPdf({ url, data, name, documentId }) {
+  if (!window.dispatchEvent(new Event("pdf-markup-before-close", { cancelable: true }))) return;
   markupLayer?.destroy();
   markupLayer=null;
   markupBar.hidden=true;
@@ -361,6 +362,9 @@ $("#zoom-in").onclick = () => gestures?.zoomBy(1.25);
 $("#zoom-out").onclick = () => gestures?.zoomBy(1 / 1.25);
 $("#fit").onclick = () => gestures?.reset();
 $("#back").onclick = () => {
+  if (!window.dispatchEvent(new Event("pdf-markup-before-close", { cancelable: true }))) return;
+  markupLayer?.destroy();
+  markupLayer = null;
   gestures?.destroy();
   gestures = null;
   renderVersion++;
