@@ -3,33 +3,57 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Team 3</title>
+    <title>PDF-läsare</title>
+    <script src="./streambim-widget-api.min.js"></script>
   </head>
   <body>
     <div class="frame">
-      <header>
-        <div>
-          <p class="kicker">StreamBIM hackathon</p>
-          <h1>Team 3</h1>
+      <section id="list-view" class="view">
+        <header>
+          <div>
+            <p class="kicker">Team 3 · Dokument</p>
+            <h1>PDF-läsare</h1>
+          </div>
+          <p id="status" class="status">Ansluter…</p>
+        </header>
+
+        <div id="controls" class="controls" hidden>
+          <input id="search" type="search" placeholder="Sök dokument…" />
+          <select id="folder" hidden></select>
         </div>
-        <p id="status" class="status">Ansluter…</p>
-      </header>
 
-      <p class="lead">Klicka på något i modellen.</p>
-      <p class="note">Namn, typ och våning visas här, och objektet markeras i vyn. Ändra src/main.js och src/style.css. Låt src/streambim.js vara. Inga nya paket. En push till main syns efter ungefär en minut.</p>
+        <p id="message" class="message" hidden></p>
 
-      <section class="card">
-        <p id="empty">Inget valt ännu.</p>
-        <div id="facts" hidden>
-          <p id="name" class="name">–</p>
-          <p class="row"><span>Typ</span><b id="type">–</b></p>
-          <p class="row"><span>Våning</span><b id="floor">–</b></p>
+        <ul id="doc-list" class="doc-list"></ul>
+
+        <div id="local" class="local" hidden>
+          <label class="primary">
+            Välj en PDF
+            <input id="file-input" type="file" accept="application/pdf" hidden />
+          </label>
         </div>
       </section>
 
-      <section id="simulator" class="simulator" hidden>
-        <p>Lokalt finns ingen modell. Klicka ett prov.</p>
-        <div id="object-chips" class="chips"></div>
+      <section id="viewer-view" class="view viewer" hidden>
+        <div class="bar">
+          <button id="back" class="link">← Dokument</button>
+          <a id="open-tab" class="link" target="_blank" rel="noreferrer" hidden>Öppna i ny flik ↗</a>
+        </div>
+        <div class="bar">
+          <span id="doc-title" class="title"></span>
+          <div class="tools">
+            <button id="prev" aria-label="Föregående sida">‹</button>
+            <span id="page-info" class="page"></span>
+            <button id="next" aria-label="Nästa sida">›</button>
+            <button id="zoom-out" aria-label="Zooma ut">−</button>
+            <button id="zoom-in" aria-label="Zooma in">+</button>
+            <button id="fit" aria-label="Anpassa bredd">⤢</button>
+          </div>
+        </div>
+        <div id="stage" class="stage">
+          <canvas id="canvas" hidden></canvas>
+          <iframe id="frame" title="PDF" hidden></iframe>
+        </div>
       </section>
     </div>
     <script type="module" src="/src/main.js"></script>
