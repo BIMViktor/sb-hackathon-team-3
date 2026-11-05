@@ -28,9 +28,13 @@ const stageEl = $("#stage");
 const canvas = $("#canvas");
 const frame = $("#frame");
 const openTab = $("#open-tab");
+const scopeEl = document.createElement("select");
+scopeEl.innerHTML = `<option value="calibrated">Kalibrerade i byggnaden</option><option value="all">Alla PDF:er i byggnaden</option>`;
+$("#controls").prepend(scopeEl);
 
 let client;
 let projectId = null;
+let buildingId = null;
 let docs = [];
 let folders = new Map();
 let pdfDoc = null;
@@ -75,7 +79,7 @@ async function loadDocuments() {
   showMessage("Hämtar dokument…");
   const [folderRes, docRes] = await Promise.all([
     sbGet(`/project-${projectId}/api/v1/v2/folders`).catch((e) => (log("folders", e), { data: [] })),
-    sbGet(`/project-${projectId}/api/v1/v2/documents?filter[fileExtensions]=pdf`),
+    sbGet(`/project-${projectId}/api/v1/v2/documents?filter[fileExtensions]=pdf&filter[buildingId]=${buildingId}`),
   ]);
   folders = new Map((folderRes.data || []).map((f) => [f.id, f.attributes?.name || `Mapp ${f.id}`]));
   docs = (docRes.data || [])
@@ -88,12 +92,15 @@ async function loadDocuments() {
       filesize: Number(d.attributes.filesize || 0),
       revision: d.attributes.revision ?? 1,
       folderId: d.relationships?.parent?.data?.id ?? null,
+      calibrated: (d.relationships?.["document-alignments"]?.data || []).some((a) => String(a.id).endsWith(`-${buildingId}`)),
     }))
     .sort((a, b) => a.filename.localeCompare(b.filename, "sv"));
-  statusEl.textContent = `Live · ${docs.length} PDF:er`;
+  const nCal = docs.filter((d) => d.calibrated).length;
+  if (!nCal) scopeEl.value = "all";
+  statusEl.textContent = `${nCal} kalibrerade · ${docs.length} PDF:er`;
   fillFolders();
   renderList();
-  showMessage(docs.length ? "" : "Inga PDF:er i projektet.");
+  showMessage(docs.length ? "" : "Inga PDF:er kopplade till byggnaden.");
 }
 
 async function getDownloadUrl(id) {
@@ -121,18 +128,18 @@ function renderList() {
   const q = searchEl.value.trim().toLowerCase();
   const f = folderEl.value || "all";
   const shown = docs.filter(
-    (d) => (f === "all" || d.folderId === f) && (d.filename + " " + d.description).toLowerCase().includes(q),
+    (d) => (scopeEl.value === "all" || d.calibrated) && (f === "all" || d.folderId === f) && (d.filename + " " + d.description).toLowerCase().includes(q),
   );
   listEl.innerHTML = shown
     .map(
       (d) => `<li><button class="doc" data-id="${d.id}">
-        <span class="icon">PDF</span>
+        <span class="icon">PDF</span>${d.calibrated ? `<span class="cal" title="Kalibrerad">✓</span>` : ""}
         <span class="meta"><b>${escapeHtml(d.filename)}</b>
         <small>${d.folderId && folders.get(d.folderId) ? escapeHtml(folders.get(d.folderId)) + " · " : ""}rev ${d.revision} · ${size(d.filesize)}</small></span>
       </button></li>`,
     )
     .join("");
-  if (docs.length && !shown.length) listEl.innerHTML = `<li class="empty">Inga träffar.</li>`;
+  if (docs.length && !shown.length) listEl.innerHTML = `<li class="empty">${scopeEl.value === "calibrated" ? "Inga kalibrerade PDF:er. Välj Alla PDF:er." : "Inga träffar."}</li>`;
 }
 
 listEl.addEventListener("click", async (e) => {
@@ -152,6 +159,7 @@ listEl.addEventListener("click", async (e) => {
 });
 searchEl.addEventListener("input", renderList);
 folderEl.addEventListener("change", renderList);
+scopeEl.addEventListener("change", renderList);
 
 /* ---------- Viewer ---------- */
 
@@ -250,6 +258,8 @@ async function start() {
   if (client.mode === "live") {
     try {
       projectId = await client.getProjectId();
+      buildingId = await client.api.getBuildingId();
+      if (!buildingId) throw new Error("Ingen byggnad är öppen i vyn.");
       $("#controls").hidden = false;
       await loadDocuments();
     } catch (err) {
