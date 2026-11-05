@@ -19,6 +19,7 @@ const $ = (sel) => document.querySelector(sel);
 const statusEl = $("#status");
 const listView = $("#list-view");
 const viewerView = $("#viewer-view");
+const frameEl = document.querySelector(".frame");
 const listEl = $("#doc-list");
 const searchEl = $("#search");
 const folderEl = $("#folder");
@@ -228,6 +229,7 @@ async function openDocument(id, name, wanted, known, fallbackRevision) {
   revSelect.hidden = revisions.length === 0;
   revSelect.value = String(revision);
   revSelect.title = "Annoteringar sparas per revision";
+  renderList();
   await openPdf({ url, name, documentId: id, revision: { current: revision, legacy: current } });
 }
 
@@ -252,7 +254,7 @@ function renderList() {
   );
   listEl.innerHTML = shown
     .map(
-      (d) => `<li><button class="doc" data-id="${d.id}">
+      (d) => `<li><button class="doc${openDoc?.id === d.id ? " active" : ""}" data-id="${d.id}" ${openDoc?.id === d.id ? 'aria-current="true"' : ""}>
         <span class="icon">PDF</span>${d.calibrated ? `<span class="cal" title="Kalibrerad">✓</span>` : ""}
         <span class="meta"><b>${escapeHtml(d.filename)}</b>
         <small>${d.folderId && folders.get(d.folderId) ? escapeHtml(folders.get(d.folderId)) + " · " : ""}rev ${d.revision} · ${size(d.filesize)}</small></span>
@@ -266,6 +268,8 @@ listEl.addEventListener("click", async (e) => {
   const btn = e.target.closest("button.doc");
   if (!btn) return;
   const doc = docs.find((d) => d.id === btn.dataset.id);
+  if (openDoc?.id === doc.id) return;
+  if (markupLayer && !window.dispatchEvent(new Event("pdf-markup-before-close", { cancelable: true }))) return;
   btn.classList.add("busy");
   try {
     await openDocument(doc.id, doc.filename, undefined, undefined, doc.revision);
@@ -320,8 +324,8 @@ async function openPdf({ url, data, name, documentId, revision }) {
   markupLayer=null;
   markupBar.hidden=true;
   surface.hidden=false;
-  listView.hidden = true;
   viewerView.hidden = false;
+  layout();
   titleEl.textContent = name;
   titleEl.title = name;
   openTab.hidden = !url;
@@ -431,10 +435,21 @@ $("#back").onclick = () => {
   renderVersion++;
   renderTask?.cancel();
   viewerView.hidden = true;
-  listView.hidden = false;
+  openDoc = null;
+  layout();
+  renderList();
   frame.removeAttribute("src");
 };
-window.addEventListener("resize", () => !viewerView.hidden && renderPage());
+// Bred skärm: dokumentlista och lager till vänster, PDF till höger.
+function layout() {
+  const wide = window.innerWidth >= 720 && !viewerView.hidden;
+  frameEl.classList.toggle("split", wide);
+  listView.hidden = !viewerView.hidden && !wide;
+  $("#back").hidden = wide;
+  if (wide) { if (layerBar.parentElement !== listView) listView.append(layerBar); }
+  else if (markupBar.nextElementSibling !== layerBar) markupBar.after(layerBar);
+}
+window.addEventListener("resize", () => { layout(); if (!viewerView.hidden) renderPage(); });
 
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files?.[0];

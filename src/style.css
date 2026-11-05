@@ -88,3 +88,12 @@ h1 { margin: 0; font-size: 20px; }
 .layer-list button { border: 0; background: none; padding: 3px 6px; font: inherit; color: var(--text); cursor: pointer; }
 .layer-list button:disabled { opacity: .35; cursor: default; }
 .layer-list small { color: var(--muted); }
+.frame.split { flex-direction: row; }
+.frame.split #list-view { flex: none; width: 300px; border-right: 1px solid var(--line); background: var(--panel); }
+.frame.split #list-view header { padding: 12px 14px 8px; }
+.frame.split #list-view h1 { font-size: 16px; }
+.frame.split .viewer { flex: 1; min-width: 0; }
+.frame.split .layer-bar { flex: none; flex-direction: column; align-items: stretch; border-top: 1px solid var(--line); border-bottom: 0; max-height: 40%; overflow-y: auto; }
+.frame.split .layer-list { flex-direction: column; }
+.frame.split .layer-list .layer-name { flex: 1; text-align: left; }
+.doc.active { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
