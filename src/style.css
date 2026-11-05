@@ -78,3 +78,13 @@ h1 { margin: 0; font-size: 20px; }
 .markup-tools button:disabled { opacity:.4; }
 .markup-tools select { padding:5px; max-width:85px; border:1px solid var(--line); border-radius:4px; background:var(--card); color:var(--text); }
 .markup-status { color:var(--muted); font-size:12px; }
+.rev-select { flex: none; max-width: 170px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); font: inherit; font-size: 12px; }
+.layer-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--card); font-size: 12px; color: var(--muted); }
+.layer-bar select { padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+.layer-bar > button { padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+.layer-list { display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; list-style: none; margin: 0; padding: 0; }
+.layer-list li { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.layer-list li.active { border-color: var(--accent); background: var(--accent-soft); }
+.layer-list button { border: 0; background: none; padding: 3px 6px; font: inherit; color: var(--text); cursor: pointer; }
+.layer-list button:disabled { opacity: .35; cursor: default; }
+.layer-list small { color: var(--muted); }

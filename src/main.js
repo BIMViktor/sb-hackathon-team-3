@@ -41,6 +41,36 @@ markupBar.hidden = true;
 markupBar.innerHTML = `<div class="markup-tools">${[['pan','✋','Flytta PDF'],['select','↖','Välj annotering'],['highlight','▰','Överstrykningspenna'],['pen','✎','Frihand'],['cloud','☁','Moln'],['rectangle','▭','Rektangel'],['square','□','Ruta']].map(([id,icon,name])=>`<button data-tool="${id}" aria-label="${name}" title="${name}">${icon}</button>`).join('')}<select aria-label="Färg" data-style="color"><option value="red">Röd</option><option value="yellow">Gul</option><option value="green">Grön</option><option value="blue">Blå</option><option value="black">Svart</option></select><select aria-label="Linjetjocklek" data-style="width">${[1,2,3,5,8].map(n=>`<option value="${n}" ${n===3?'selected':''}>${n} pt</option>`).join('')}</select><select aria-label="Opacitet" data-style="opacity">${[1,.75,.5,.25].map(n=>`<option value="${n}">${n*100}%</option>`).join('')}</select><button data-action="delete" aria-label="Ta bort annotering" title="Ta bort annotering" disabled>⌫</button><button data-action="reload" aria-label="Uppdatera annoteringar" title="Uppdatera annoteringar">↻</button><button data-action="retry" aria-label="Försök spara igen" title="Försök spara igen">⇧</button></div><span class="markup-status" role="status"></span>`;
 stageEl.before(markupBar);
 const markupStatus = markupBar.querySelector('.markup-status');
+const layerBar = document.createElement("div");
+layerBar.className = "layer-bar";
+layerBar.hidden = true;
+layerBar.innerHTML = `<label>Redigerar i <select aria-label="Aktivt lager" data-layer-active></select></label><button data-layer-add aria-label="Nytt lager" title="Nytt lager">＋ Lager</button><ul class="layer-list"></ul>`;
+markupBar.after(layerBar);
+const layerActive = layerBar.querySelector("[data-layer-active]");
+const layerList = layerBar.querySelector(".layer-list");
+function renderLayers(state) {
+  layerActive.innerHTML = state.layers.map(l => `<option value="${escapeHtml(l.id)}">${escapeHtml(l.name)}</option>`).join("");
+  layerActive.value = state.active;
+  layerList.innerHTML = state.layers.map(l => `<li class="${l.id===state.active?"active":""}"><button data-layer-toggle="${escapeHtml(l.id)}" aria-label="${l.visible?"Dölj":"Visa"} ${escapeHtml(l.name)}" title="${l.visible?"Dölj":"Visa"}">${l.visible?"👁":"◌"}</button><button class="layer-name" data-layer-choose="${escapeHtml(l.id)}">${escapeHtml(l.name)} <small>${l.count}</small></button><button data-layer-remove="${escapeHtml(l.id)}" aria-label="Ta bort ${escapeHtml(l.name)}" title="Ta bort lager" ${state.layers.length<2?"disabled":""}>🗑</button></li>`).join("");
+}
+layerActive.onchange = () => markupLayer?.setActiveLayer(layerActive.value);
+layerBar.onclick = e => {
+  const b = e.target.closest("button"); if (!b || !markupLayer) return;
+  if (b.hasAttribute("data-layer-add")) markupLayer.addLayer();
+  if (b.dataset.layerToggle) markupLayer.toggleLayer(b.dataset.layerToggle);
+  if (b.dataset.layerChoose) markupLayer.setActiveLayer(b.dataset.layerChoose);
+  if (b.dataset.layerRemove && confirm("Ta bort lagret och dess annoteringar för alla i projektet?")) markupLayer.removeLayer(b.dataset.layerRemove);
+};
+const revSelect = document.createElement("select");
+revSelect.setAttribute("aria-label", "Välj revision");
+revSelect.className = "rev-select";
+revSelect.hidden = true;
+let openDoc = null;
+revSelect.onchange = () => {
+  if (!openDoc) return;
+  if (!window.dispatchEvent(new Event("pdf-markup-before-close", { cancelable: true }))) { revSelect.value = String(openDoc.revision); return; }
+  void openDocument(openDoc.id, openDoc.name, Number(revSelect.value), openDoc.revisions);
+};
 markupBar.onclick = e => {
   const button=e.target.closest('button');if(!button)return;
   if(button.dataset.tool) {
@@ -54,6 +84,7 @@ markupBar.onclick = e => {
   if(button.dataset.action==='retry')markupLayer?.retry();
 };
 markupBar.onchange = e => { const key=e.target.dataset.style;if(key)markupLayer?.setStyle({[key]:key==='color'?e.target.value:Number(e.target.value)}); };
+titleEl.after(revSelect);
 const frame = $("#frame");
 const openTab = $("#open-tab");
 const zoomSelect = document.createElement("select");
@@ -171,6 +202,35 @@ async function getDownloadUrl(id) {
   return `${origin}/project-${projectId}/api/v1${rel}`;
 }
 
+async function listRevisions(id) {
+  const res = await sbGet(`/project-${projectId}/api/v1/v2/document-revisions?filter[document]=${encodeURIComponent(id)}`);
+  return (res?.data || []).map(r => ({ revision: Number(r.attributes?.revision ?? String(r.id).split("-").pop()), active: Boolean(r.attributes?.["is-active-revision"]), uploaded: String(r.attributes?.["uploaded-date"] || "") }))
+    .filter(r => Number.isInteger(r.revision) && r.revision > 0).sort((a, b) => b.revision - a.revision);
+}
+
+// Aktuell revision via dokumenterad länk; äldre revisioner med revisionsargument (ej dokumenterat av StreamBIM).
+async function getRevisionUrl(id, revision, current) {
+  if (revision === current) return getDownloadUrl(id);
+  const res = await sbGet(`/project-${projectId}/api/v1/documents/${id}/downloadlink?revision=${revision}`, "application/json");
+  const rel = typeof res === "string" ? res : res.data;
+  if (/^https?:\/\//.test(rel)) return rel;
+  const origin = location.ancestorOrigins?.[0] || "https://app.streambim.com";
+  return `${origin}/project-${projectId}/api/v1${rel}`;
+}
+
+async function openDocument(id, name, wanted, known, fallbackRevision) {
+  const revisions = known || await listRevisions(id).catch(err => { log("revisioner", err); return []; });
+  const current = revisions.find(r => r.active)?.revision ?? Number(fallbackRevision ?? revisions[0]?.revision ?? 1);
+  const revision = wanted ?? current;
+  const url = await getRevisionUrl(id, revision, current);
+  openDoc = { id, name, revision, revisions };
+  revSelect.innerHTML = revisions.map(r => `<option value="${r.revision}">Rev ${r.revision}${r.active ? " (aktuell)" : ""}${r.uploaded ? " · " + r.uploaded.slice(0, 10) : ""}</option>`).join("");
+  revSelect.hidden = revisions.length === 0;
+  revSelect.value = String(revision);
+  revSelect.title = "Annoteringar sparas per revision";
+  await openPdf({ url, name, documentId: id, revision: { current: revision, legacy: current } });
+}
+
 /* ---------- List ---------- */
 
 function fillFolders() {
@@ -208,8 +268,7 @@ listEl.addEventListener("click", async (e) => {
   const doc = docs.find((d) => d.id === btn.dataset.id);
   btn.classList.add("busy");
   try {
-    const url = await getDownloadUrl(doc.id);
-    await openPdf({ url, name: doc.filename, documentId: doc.id });
+    await openDocument(doc.id, doc.filename, undefined, undefined, doc.revision);
   } catch (err) {
     log("open", err);
     showMessage(err.message, true);
@@ -231,9 +290,8 @@ directEl.addEventListener("submit", async (e) => {
     } catch (err) {
       log("kunde inte läsa dokumentinfo", err);
     }
-    const url = await getDownloadUrl(id);
+    await openDocument(id, name);
     showMessage("");
-    await openPdf({ url, name, documentId: id });
   } catch (err) {
     log("direct", err);
     showMessage(err.message, true);
@@ -254,7 +312,9 @@ function loadPdfjs() {
   return pdfjsPromise;
 }
 
-async function openPdf({ url, data, name, documentId }) {
+async function openPdf({ url, data, name, documentId, revision }) {
+  if (!documentId) { openDoc = null; revSelect.hidden = true; }
+  layerBar.hidden = true;
   if (!window.dispatchEvent(new Event("pdf-markup-before-close", { cancelable: true }))) return;
   markupLayer?.destroy();
   markupLayer=null;
@@ -288,8 +348,9 @@ async function openPdf({ url, data, name, documentId }) {
     const pdfjs = await loadPdfjs();
     pdfDoc = await pdfjs.getDocument({ data: new Uint8Array(data) }).promise;
     canvas.hidden = false;
-    const store = documentId && client?.api ? createStreambimMarkupStore(client.api,String(projectId),String(buildingId),String(documentId)) : undefined;
-    markupLayer = createMarkupLayer(surface,store,text=>{markupStatus.textContent=text;},selected=>{markupBar.querySelector('[data-action="delete"]').disabled=!selected;});
+    const store = documentId && client?.api ? createStreambimMarkupStore(client.api,String(projectId),String(buildingId),String(documentId),revision) : undefined;
+    markupLayer = createMarkupLayer(surface,store,text=>{markupStatus.textContent=text;},selected=>{markupBar.querySelector('[data-action="delete"]').disabled=!selected;},renderLayers);
+    layerBar.hidden=false;
     markupStatus.textContent = store ? 'Laddar annoteringar…' : 'Ej sparat · fristående läge';
     markupBar.hidden=false;
     markupTool='pan';
