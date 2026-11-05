@@ -7,6 +7,7 @@
 
 import { connectWidget } from "./streambim.js";
 import "./style.css";
+import { createPdfGestures } from "./pdf-gestures.js";
 
 const PDFJS_VERSION = "4.10.38";
 const PDFJS_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.min.mjs`;
@@ -28,6 +29,17 @@ const stageEl = $("#stage");
 const canvas = $("#canvas");
 const frame = $("#frame");
 const openTab = $("#open-tab");
+const zoomSelect = document.createElement("select");
+zoomSelect.setAttribute("aria-label", "Zoomnivå");
+zoomSelect.innerHTML = [50,100,150,200,300,400,800].map(n => `<option value="${n/100}">${n}%</option>`).join("");
+$("#fit").before(zoomSelect);
+zoomSelect.onchange = () => gestures?.zoomTo(Number(zoomSelect.value));
+const fitPageButton = document.createElement("button");
+fitPageButton.textContent = "▣";
+fitPageButton.setAttribute("aria-label", "Visa hela sidan");
+fitPageButton.title = "Visa hela sidan";
+$("#fit").after(fitPageButton);
+fitPageButton.onclick = () => gestures?.fitPage();
 const scopeEl = document.createElement("select");
 scopeEl.innerHTML = `<option value="calibrated">Kalibrerade i byggnaden</option><option value="all">Alla PDF:er i projektet</option>`;
 $("#controls").prepend(scopeEl);
@@ -44,7 +56,8 @@ let docs = [];
 let folders = new Map();
 let pdfDoc = null;
 let pageNum = 1;
-let zoom = "fit";
+let gestures = null;
+let renderVersion = 0;
 let renderTask = null;
 
 function log(...args) {
@@ -225,10 +238,14 @@ async function openPdf({ url, data, name }) {
   frame.removeAttribute("src");
   canvas.hidden = true;
   pageEl.textContent = "Laddar…";
+  gestures?.destroy();
+  gestures = null;
+  renderVersion++;
+  renderTask?.cancel();
   pdfDoc?.destroy?.();
   pdfDoc = null;
   pageNum = 1;
-  zoom = "fit";
+
 
   try {
     if (!data) {
@@ -240,6 +257,17 @@ async function openPdf({ url, data, name }) {
     pdfDoc = await pdfjs.getDocument({ data: new Uint8Array(data) }).promise;
     canvas.hidden = false;
     await renderPage();
+    const { default: Panzoom } = await import(/* @vite-ignore */ "https://cdn.jsdelivr.net/npm/@panzoom/panzoom@4.6.0/dist/panzoom.es.js");
+    gestures = createPdfGestures(canvas, stageEl, Panzoom, (scale) => renderPage(false, scale), (scale) => {
+      const custom = zoomSelect.querySelector('[data-current]');
+      custom?.remove();
+      if (![0.5,1,1.5,2,3,4,8].includes(scale)) {
+        const option = new Option(`${Math.round(scale*100)}%`, String(scale));
+        option.dataset.current = "true";
+        zoomSelect.prepend(option);
+      }
+      zoomSelect.value = String(scale);
+    });
   } catch (err) {
     // Hämtningen stoppas troligen av CORS. Visa i webbläsarens egen läsare istället.
     log("pdf.js kunde inte läsa, visar i ram", err);
@@ -253,39 +281,54 @@ async function openPdf({ url, data, name }) {
   }
 }
 
-async function renderPage() {
+async function renderPage(reset = true, resolution = 1) {
   if (!pdfDoc) return;
-  const page = await pdfDoc.getPage(pageNum);
-  const base = page.getViewport({ scale: 1 });
-  const scale = zoom === "fit" ? (stageEl.clientWidth - 24) / base.width : zoom;
-  const dpr = window.devicePixelRatio || 1;
-  const viewport = page.getViewport({ scale: scale * dpr });
+  const version = ++renderVersion;
   renderTask?.cancel();
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  canvas.style.width = `${viewport.width / dpr}px`;
-  canvas.style.height = `${viewport.height / dpr}px`;
-  renderTask = page.render({ canvasContext: canvas.getContext("2d"), viewport });
-  await renderTask.promise.catch(() => {});
-  pageEl.textContent = `${pageNum} / ${pdfDoc.numPages}`;
-}
-
-function currentScale() {
-  if (typeof zoom === "number") return zoom;
-  return 1;
+  if (reset) gestures?.reset();
+  try {
+    const page = await pdfDoc.getPage(pageNum);
+    if (version !== renderVersion) return;
+    const base = page.getViewport({ scale: 1 });
+    const scale = Math.max(1, stageEl.clientWidth - 24) / base.width;
+    const width = base.width * scale;
+    const height = base.height * scale;
+    const pixels = Math.min((window.devicePixelRatio || 1) * resolution, 4, 8192 / Math.max(width, height), Math.sqrt(16000000 / (width * height)));
+    const viewport = page.getViewport({ scale: scale * pixels });
+    const buffer = document.createElement("canvas");
+    buffer.width = Math.ceil(viewport.width);
+    buffer.height = Math.ceil(viewport.height);
+    renderTask = page.render({ canvasContext: buffer.getContext("2d"), viewport });
+    await renderTask.promise;
+    if (version !== renderVersion) return;
+    canvas.width = buffer.width;
+    canvas.height = buffer.height;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    canvas.getContext("2d").drawImage(buffer, 0, 0);
+    pageEl.textContent = `${pageNum} / ${pdfDoc.numPages}`;
+    $("#prev").disabled = pageNum <= 1;
+    $("#next").disabled = pageNum >= pdfDoc.numPages;
+  } catch (err) {
+    if (version === renderVersion && err.name !== "RenderingCancelledException") log("render", err);
+  }
 }
 
 $("#prev").onclick = () => pdfDoc && pageNum > 1 && (pageNum--, renderPage());
 $("#next").onclick = () => pdfDoc && pageNum < pdfDoc.numPages && (pageNum++, renderPage());
-$("#zoom-in").onclick = () => ((zoom = Math.min(5, currentScale() + 0.25)), renderPage());
-$("#zoom-out").onclick = () => ((zoom = Math.max(0.25, currentScale() - 0.25)), renderPage());
-$("#fit").onclick = () => ((zoom = "fit"), renderPage());
+$("#zoom-in").onclick = () => gestures?.zoomBy(1.25);
+$("#zoom-out").onclick = () => gestures?.zoomBy(1 / 1.25);
+$("#fit").onclick = () => gestures?.reset();
 $("#back").onclick = () => {
+  gestures?.destroy();
+  gestures = null;
+  renderVersion++;
+  renderTask?.cancel();
   viewerView.hidden = true;
   listView.hidden = false;
   frame.removeAttribute("src");
 };
-window.addEventListener("resize", () => zoom === "fit" && renderPage());
+window.addEventListener("resize", () => !viewerView.hidden && renderPage());
 
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files?.[0];
