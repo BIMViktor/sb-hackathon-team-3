@@ -29,7 +29,7 @@ const canvas = $("#canvas");
 const frame = $("#frame");
 const openTab = $("#open-tab");
 const scopeEl = document.createElement("select");
-scopeEl.innerHTML = `<option value="calibrated">Kalibrerade i byggnaden</option><option value="all">Alla PDF:er i byggnaden</option>`;
+scopeEl.innerHTML = `<option value="calibrated">Kalibrerade i byggnaden</option><option value="all">Alla PDF:er i projektet</option>`;
 $("#controls").prepend(scopeEl);
 
 let client;
@@ -79,7 +79,9 @@ async function loadDocuments() {
   showMessage("Hämtar dokument…");
   const [folderRes, docRes] = await Promise.all([
     sbGet(`/project-${projectId}/api/v1/v2/folders`).catch((e) => (log("folders", e), { data: [] })),
-    sbGet(`/project-${projectId}/api/v1/v2/documents?filter[fileExtensions]=pdf&filter[buildingId]=${buildingId}`),
+    // filter[buildingId] gav HTTP-fel i projekt 19513, så vi hämtar alla PDF:er
+    // och avgör kalibrering mot byggnaden via document-alignments.
+    sbGet(`/project-${projectId}/api/v1/v2/documents?filter[fileExtensions]=pdf`),
   ]);
   folders = new Map((folderRes.data || []).map((f) => [f.id, f.attributes?.name || `Mapp ${f.id}`]));
   docs = (docRes.data || [])
@@ -100,7 +102,7 @@ async function loadDocuments() {
   statusEl.textContent = `${nCal} kalibrerade · ${docs.length} PDF:er`;
   fillFolders();
   renderList();
-  showMessage(docs.length ? "" : "Inga PDF:er kopplade till byggnaden.");
+  showMessage(docs.length ? "" : "Inga PDF:er i projektet.");
 }
 
 async function getDownloadUrl(id) {
