@@ -31,6 +31,11 @@ const openTab = $("#open-tab");
 const scopeEl = document.createElement("select");
 scopeEl.innerHTML = `<option value="calibrated">Kalibrerade i byggnaden</option><option value="all">Alla PDF:er i projektet</option>`;
 $("#controls").prepend(scopeEl);
+const directEl = document.createElement("form");
+directEl.className = "direct";
+directEl.hidden = true;
+directEl.innerHTML = `<label>Öppna dokument-ID</label><input name="id" value="1000" inputmode="numeric" /><button type="submit">Öppna</button>`;
+$("#controls").after(directEl);
 
 let client;
 let projectId = null;
@@ -172,6 +177,28 @@ listEl.addEventListener("click", async (e) => {
     btn.classList.remove("busy");
   }
 });
+directEl.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = String(new FormData(directEl).get("id") || "").trim();
+  if (!id) return;
+  showMessage(`Öppnar dokument ${id}…`);
+  try {
+    let name = `Dokument ${id}`;
+    try {
+      const res = await sbGet(`/project-${projectId}/api/v1/v2/documents/${id}`);
+      if (res?.data?.attributes?.filename) name = res.data.attributes.filename;
+      log("dokument", id, res?.data);
+    } catch (err) {
+      log("kunde inte läsa dokumentinfo", err);
+    }
+    const url = await getDownloadUrl(id);
+    showMessage("");
+    await openPdf({ url, name });
+  } catch (err) {
+    log("direct", err);
+    showMessage(err.message, true);
+  }
+});
 searchEl.addEventListener("input", renderList);
 folderEl.addEventListener("change", renderList);
 scopeEl.addEventListener("change", renderList);
@@ -276,6 +303,7 @@ async function start() {
       buildingId = await client.api.getBuildingId();
       if (!buildingId) throw new Error("Ingen byggnad är öppen i vyn.");
       $("#controls").hidden = false;
+      directEl.hidden = false;
       await loadDocuments();
     } catch (err) {
       log("load", err);
