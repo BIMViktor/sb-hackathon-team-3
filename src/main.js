@@ -8,7 +8,7 @@
 import { connectWidget } from "./streambim.js";
 import "./style.css";
 import { createPdfGestures } from "./pdf-gestures.js";
-import { createMarkupLayer } from "./pdf-markup.js";
+import { createMarkupLayer, requestMarkupClose } from "./pdf-markup.js";
 import { createStreambimMarkupStore } from "./streambim-markup.js";
 
 const PDFJS_VERSION = "4.10.38";
@@ -67,10 +67,11 @@ revSelect.setAttribute("aria-label", "Välj revision");
 revSelect.className = "rev-select";
 revSelect.hidden = true;
 let openDoc = null;
-revSelect.onchange = () => {
+revSelect.onchange = async () => {
   if (!openDoc) return;
-  if (!window.dispatchEvent(new Event("pdf-markup-before-close", { cancelable: true }))) { revSelect.value = String(openDoc.revision); return; }
-  void openDocument(openDoc.id, openDoc.name, Number(revSelect.value), openDoc.revisions);
+  const previous = openDoc;
+  const opened = await openDocument(previous.id, previous.name, Number(revSelect.value), previous.revisions);
+  if (!opened) revSelect.value = String(previous.revision);
 };
 markupBar.onclick = e => {
   const button=e.target.closest('button');if(!button)return;
@@ -219,18 +220,25 @@ async function getRevisionUrl(id, revision, current) {
   return `${origin}/project-${projectId}/api/v1${rel}`;
 }
 
+let switchingDocument = false;
 async function openDocument(id, name, wanted, known, fallbackRevision) {
+  if (switchingDocument) return false;
+  switchingDocument = true;
+  try {
+  if (!await requestMarkupClose()) return false;
   const revisions = known || await listRevisions(id).catch(err => { log("revisioner", err); return []; });
   const current = revisions.find(r => r.active)?.revision ?? Number(fallbackRevision ?? revisions[0]?.revision ?? 1);
   const revision = wanted ?? current;
   const url = await getRevisionUrl(id, revision, current);
+  if (!await openPdf({ url, name, documentId: id, revision: { current: revision, legacy: current } })) return false;
   openDoc = { id, name, revision, revisions };
   revSelect.innerHTML = revisions.map(r => `<option value="${r.revision}">Rev ${r.revision}${r.active ? " (aktuell)" : ""}${r.uploaded ? " · " + r.uploaded.slice(0, 10) : ""}</option>`).join("");
   revSelect.hidden = revisions.length === 0;
   revSelect.value = String(revision);
   revSelect.title = "Annoteringar sparas per revision";
   renderList();
-  await openPdf({ url, name, documentId: id, revision: { current: revision, legacy: current } });
+  return true;
+  } finally { switchingDocument = false; }
 }
 
 /* ---------- List ---------- */
@@ -268,8 +276,7 @@ listEl.addEventListener("click", async (e) => {
   const btn = e.target.closest("button.doc");
   if (!btn) return;
   const doc = docs.find((d) => d.id === btn.dataset.id);
-  if (openDoc?.id === doc.id) return;
-  if (markupLayer && !window.dispatchEvent(new Event("pdf-markup-before-close", { cancelable: true }))) return;
+  if (!doc || openDoc?.id === doc.id) return;
   btn.classList.add("busy");
   try {
     await openDocument(doc.id, doc.filename, undefined, undefined, doc.revision);
@@ -317,9 +324,9 @@ function loadPdfjs() {
 }
 
 async function openPdf({ url, data, name, documentId, revision }) {
+  if (!await requestMarkupClose()) return false;
   if (!documentId) { openDoc = null; revSelect.hidden = true; }
   layerBar.hidden = true;
-  if (!window.dispatchEvent(new Event("pdf-markup-before-close", { cancelable: true }))) return;
   markupLayer?.destroy();
   markupLayer=null;
   markupBar.hidden=true;
@@ -385,6 +392,7 @@ async function openPdf({ url, data, name, documentId, revision }) {
       pageEl.textContent = "Kunde inte läsa filen";
     }
   }
+  return true;
 }
 
 async function renderPage(reset = true, resolution = 1) {
@@ -426,8 +434,8 @@ $("#next").onclick = () => pdfDoc && pageNum < pdfDoc.numPages && (pageNum++, re
 $("#zoom-in").onclick = () => gestures?.zoomBy(1.25);
 $("#zoom-out").onclick = () => gestures?.zoomBy(1 / 1.25);
 $("#fit").onclick = () => gestures?.reset();
-$("#back").onclick = () => {
-  if (!window.dispatchEvent(new Event("pdf-markup-before-close", { cancelable: true }))) return;
+$("#back").onclick = async () => {
+  if (switchingDocument || !await requestMarkupClose()) return;
   markupLayer?.destroy();
   markupLayer = null;
   gestures?.destroy();
